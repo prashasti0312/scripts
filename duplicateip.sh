@@ -1,5 +1,5 @@
 #!/bin/bash
-  
+
 # Get the list of running Docker container IPs
 container_ips=$(docker inspect -f '{{.NetworkSettings.IPAddress}}' $(docker ps -q))
 echo "$container_ips"
@@ -42,12 +42,18 @@ if [[ ${#duplicate_ips[@]} -ge 1 ]]; then
     for ip in "${duplicate_ips[@]}"; do
         # Get the container IDs with the duplicate IP
         container_ids=$(docker ps -q --filter "status=running" | xargs docker inspect -f '{{.Id}} {{.NetworkSettings.IPAddress}}' | awk -v ip="$ip" '$2==ip {print $1}')
-        echo $container_ids 
+        echo $container_ids
         # Redeploy the services by restarting the containers
         echo "Redeploying services with IP: $ip"
         for container_id in $container_ids; do
-            docker restart "$container_id"
-            echo "Restarted container: $container_id"
+            #curl --unix-socket /var/run/docker.sock http:/v1.24/containers/f26f67feb79a/json | jq -r '.Config.Labels."com.amazonaws.ecs.task-definition-family", .Config.Labels."com.amazonaws.ecs.task-definition-version"'
+            #echo "Restarted container: $container_id"
+	    response=$(curl --unix-socket /var/run/docker.sock http:/v1.24/containers/$container_id/json)
+	    #task_definition_family=$(echo "$response" | jq -r '.Config.Labels["com.amazonaws.ecs.task-definition-family"]')
+            #task_definition_version=$(echo "$response" | jq -r '.Config.Labels["com.amazonaws.ecs.task-definition-version"]')
+	    cluster=$(echo "$response" | jq -r '.Config.Labels["com.amazonaws.ecs.cluster"]')
+	    task_definition_arn=$(echo "$response" | jq -r '.Config.Labels["com.amazonaws.ecs.task-arn"]')
+            aws ecs stop-task --region ap-south-1 --cluster $cluster --task $task_definition_arn
         done
     done
 else
